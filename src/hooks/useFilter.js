@@ -5,50 +5,48 @@ export const EQUAL_SIGN = "~";
 export const AND_SIGN = "+";
 export const ARRAY_SEPARATOR = "--";
 
-function parseUrl(query) {
-  if (!query) return {};
-  query = query.replace(/^\?/, "").replace(/=$/, "");
+function parseUrl(url) {
+  if (!url) return {};
+  url = url.replace(/^\?/, "").replace(/=$/, "");
 
   return Object.fromEntries(
-    decodeURIComponent(query)
+    decodeURIComponent(url)
       .split(AND_SIGN)
       .map((pair) => {
         let [key, value] = pair.split(EQUAL_SIGN);
-        if (key === "seller-type") {
-          let values = value ? value.split(ARRAY_SEPARATOR) : [];
-          values = [...new Set(values)];
-          return [key, values];
-        } else {
-          return [key, value];
+        if (key === "seller-type" || key === "brand") {
+          return [
+            key,
+            value
+              ? [...new Set(value.split(ARRAY_SEPARATOR).map((v) => Number(v)))]
+              : [],
+          ];
         }
+        return [key, value];
       })
       .filter(Boolean)
   );
 }
 
 function stringifyUrl(data) {
-  const queryString = Object.keys(data)
-    .map((key) => {
-      const value = data[key];
-      if (Array.isArray(value)) {
-        return `${key}${EQUAL_SIGN}${value.join(ARRAY_SEPARATOR)}`;
-      }
-      return `${key}${EQUAL_SIGN}${value}`;
-    })
+  return Object.entries(data)
+    .map(([key, value]) =>
+      Array.isArray(value)
+        ? `${key}${EQUAL_SIGN}${value.join(ARRAY_SEPARATOR)}`
+        : `${key}${EQUAL_SIGN}${value}`
+    )
     .join(AND_SIGN);
-  return queryString;
 }
 
 // TODO: complete this hook
 function useFilter(formData) {
   const [filterState, setFilterState] = useState({});
-
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
     const params = parseUrl(location.search);
-    setFilterState(params);
+    setFilterState(params || {});
   }, [location.search]);
 
   function onChange(e, name, type) {
@@ -59,59 +57,46 @@ function useFilter(formData) {
 
     setFilterState((prevState) => {
       const newState = { ...prevState };
+
       switch (type) {
         case FormType.CHECKBOX_GROUP:
-          return handleCheckboxGroup(newState, prevState, name, value);
+          return handleCheckboxGroup(newState, name, value, isChecked);
 
         case FormType.CHECKBOX:
           return handleCheckbox(newState, name, value, isChecked);
 
         default:
-          if (value === "" || value === null) {
-            delete newState[name];
-            return newState;
-          }
+          newState[name] = value || "";
           navigate({
             pathname: "/",
             search: `?${createSearchParams(stringifyUrl(newState))}`,
           });
-          return { ...prevState, [name]: value };
+          return newState;
       }
     });
   }
 
-  function handleCheckboxGroup(newState, prevState, name, value) {
-    const prevValues = Array.isArray(prevState[name]) ? prevState[name] : [];
+  function handleCheckboxGroup(newState, name, value, isChecked) {
+    const prevValues = Array.isArray(newState[name]) ? newState[name] : [];
+    const valueNumber = Number(value);
+    const updatedValues = isChecked
+      ? [...prevValues, valueNumber]
+      : prevValues.filter((v) => v !== valueNumber);
 
-    const valueString = String(value);
-
-    const newValues = prevValues.includes(valueString)
-      ? prevValues.filter((v) => String(v) !== valueString)
-      : [...prevValues, valueString];
-
-    const uniqueValues = [...new Set(newValues)];
-
-    if (uniqueValues.length === 0) {
-      delete newState[name];
-    } else {
-      newState[name] = uniqueValues;
-    }
+    updatedValues.length
+      ? (newState[name] = updatedValues)
+      : delete newState[name];
 
     navigate({
       pathname: "/",
       search: `?${createSearchParams(stringifyUrl(newState))}`,
     });
-
     return newState;
   }
 
   function handleCheckbox(newState, name, value, isChecked) {
-    if (isChecked) {
-      newState[name] = value;
-    } else {
-      delete newState[name];
-    }
-
+    const valueNumber = Number(value); 
+    isChecked ? (newState[name] = valueNumber) : delete newState[name];
     navigate({
       pathname: "/",
       search: `?${createSearchParams(stringifyUrl(newState))}`,
@@ -122,7 +107,20 @@ function useFilter(formData) {
   function onClear(name) {
     setFilterState((prevState) => {
       const newState = { ...prevState };
+
+      formData.forEach((field) => {
+        if (field.parent === name) {
+          delete newState[field.name];
+        }
+      });
+
       delete newState[name];
+
+      navigate({
+        pathname: "/",
+        search: `?${createSearchParams(stringifyUrl(newState))}`,
+      });
+
       return newState;
     });
   }
@@ -131,6 +129,7 @@ function useFilter(formData) {
     setFilterState({});
   }
 
+  console.log("filterState", filterState);
   return { filterState, setFilterState, onChange, onClear, onClearAll };
 }
 

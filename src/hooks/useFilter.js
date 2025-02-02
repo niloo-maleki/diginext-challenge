@@ -7,35 +7,35 @@ export const ARRAY_SEPARATOR = "--";
 
 function parseUrl(url) {
   if (!url) return {};
-  url = url.replace(/^\?/, "").replace(/=$/, "");
 
-  return Object.fromEntries(
-    decodeURIComponent(url)
-      .split(AND_SIGN)
-      .map((pair) => {
-        let [key, value] = pair.split(EQUAL_SIGN);
-        if (key === "seller-type" || key === "brand") {
-          return [
-            key,
-            value
-              ? [...new Set(value.split(ARRAY_SEPARATOR).map((v) => Number(v)))]
-              : [],
-          ];
-        }
-        return [key, value];
-      })
-      .filter(Boolean)
-  );
+  const searchParams = new URLSearchParams(url);
+  const params = {};
+
+  for (let [key, value] of searchParams.entries()) {
+    if (key === "seller-type" || key === "brand") {
+      params[key] = value
+        ? value.split(ARRAY_SEPARATOR).map((v) => Number(v))
+        : [];
+    } else {
+      params[key] = value;
+    }
+  }
+
+  return params;
 }
 
 function stringifyUrl(data) {
-  return Object.entries(data)
-    .map(([key, value]) =>
-      Array.isArray(value)
-        ? `${key}${EQUAL_SIGN}${value.join(ARRAY_SEPARATOR)}`
-        : `${key}${EQUAL_SIGN}${value}`
-    )
-    .join(AND_SIGN);
+  const searchParams = new URLSearchParams();
+
+  Object.entries(data).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      searchParams.set(key, value.join(ARRAY_SEPARATOR));
+    } else {
+      searchParams.set(key, value);
+    }
+  });
+
+  return searchParams.toString();
 }
 
 // TODO: complete this hook
